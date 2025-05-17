@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
-from transformers import LogitsWarper
+from transformers import LogitsProcessor
 
 from TTS.tts.layers.tortoise.xtransformers import ContinuousTransformerWrapper, RelativePositionBias
 
@@ -397,7 +397,7 @@ class CheckpointedXTransformerEncoder(nn.Module):
         return h
 
 
-class TypicalLogitsWarper(LogitsWarper):
+class TypicalLogitsWarper(LogitsProcessor):
     def __init__(
         self,
         mass: float = 0.9,

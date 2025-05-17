@@ -12,74 +12,69 @@ This guide provides instructions for finetuning XTTSv2 on a new language, using 
 4. [Vocabulary Extension and Configuration Adjustment](#4-vocabulary-extension-and-configuration-adjustment)
 5. [DVAE Finetuning (Optional)](#5-dvae-finetuning-optional)
 6. [GPT Finetuning](#6-gpt-finetuning)
-7. [Usage Example](#7-usage-example)
+7. [合成音频](#7-合成音频)
 
 ## 1. Installation
 
-First, clone the repository and install the necessary dependencies:
+本 repo 已经包含了 [Coqui TTS](https://github.com/coqui-ai/TTS) 的所有必要代码，直接下载本 repo 即可，无需下载 [Coqui TTS](https://github.com/coqui-ai/TTS) 到本地，也无需安装 Coqui TTS
 
 ```
-git clone https://github.com/nguyenhoanganh2002/XTTSv2-Finetuning-for-New-Languages.git
+git clone https://github.com/EL-CL/XTTSv2-Finetuning-for-New-Languages.git
+（现在连接 GitHub 常失败，可下载本 repo 的 ZIP，将其上传至服务器再解压）
+
 cd XTTSv2-Finetuning-for-New-Languages
+conda create -n coqui python=3.10 -y
+conda activate coqui
+conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
 pip install -r requirements.txt
 ```
 
 ## 2. Data Preparation
 
-Ensure your data is organized as follows:
+数据集的格式：所有音频放在一个文件夹内，文件夹可以放在任意地方。采样率无需调整，训练时会自动转换。每条音频最好不要超过 12 s，否则训练时会遇到数组越界报错
+
+转写文件的格式——`bel_tts_formatter`（用于单发音人或者不区分发音人）：
 
 ```
-project_root/
-├── datasets-1/
-│   ├── wavs/
-│   │   ├── xxx.wav
-│   │   ├── yyy.wav
-│   │   ├── zzz.wav
-│   │   └── ...
-│   ├── metadata_train.csv
-│   ├── metadata_eval.csv
-├── datasets-2/
-│   ├── wavs/
-│   │   ├── xxx.wav
-│   │   ├── yyy.wav
-│   │   ├── zzz.wav
-│   │   └── ...
-│   ├── metadata_train.csv
-│   ├── metadata_eval.csv
+001.wav|How do you do?
+002.wav|Nice to meet you.
+003.wav|Good to see you.
 ...
-│   
-├── recipes/
-├── scripts/
-├── TTS/
-└── README.md
 ```
 
-Format your `metadata_train.csv` and `metadata_eval.csv` files as follows:
+转写文件的格式——`coqui`（用于多发音人）：
 
 ```
 audio_file|text|speaker_name
-wavs/xxx.wav|How do you do?|@X
-wavs/yyy.wav|Nice to meet you.|@Y
-wavs/zzz.wav|Good to see you.|@Z
+001.wav|How do you do?|@X
+002.wav|Nice to meet you.|@Y
+003.wav|Good to see you.|@Z
+...
 ```
+
+（格式出处：[TTS/tts/datasets/formatters.py](TTS/tts/datasets/formatters.py)）
+
+转写中的标点不是必要的。[train_gpt_xtts.py](train_gpt_xtts.py) 第 70 行 `formatter=` 需改为对应的格式名
+
+转写文件可以保存在任意地方（如 `models/metadata.txt`），无需和数据集放在一个文件夹下
+
+如果新增多个语言，需要每个语言准备一个转写文件
 
 ## 3. Pretrained Model Download
 
-Execute the following command to download the pretrained model:
+Hugging Face 墙内无法访问，可自己下载预训练模型后，上传至服务器（如存放在本目录下的 `original_model` 中）
 
-```bash
-python download_checkpoint.py --output_path checkpoints/
-```
+预训练模型在 https://huggingface.co/coqui/XTTS-v2/tree/main，需要下载的文件见 [download_checkpoint.py](download_checkpoint.py) 中的链接
 
 ## 4. Vocabulary Extension and Configuration Adjustment
 
-Extend the vocabulary and adjust the configuration with:
+词典扩充：运行 [extend_vocab.py](extend_vocab.py) 以根据新语言的标注扩充词典（详见文件末尾）
 
-```bash
-python extend_vocab_config.py --output_path=checkpoints/ --metadata_path datasets/metadata_train.csv --language vi --extended_vocab_size 2000
-```
+配置文件扩充：复制一份预训练模型的 config.json（如复制到 `models/config.json`），在第 130 行 `"languages"` 列表中添加要训练的新语言的语言代码/名称（与 [extend_vocab.py](extend_vocab.py) 中的一致）
 
 ## 5. DVAE Finetuning (Optional)
+
+（本项跳过）
 
 To finetune the DVAE, run:
 
@@ -94,107 +89,30 @@ CUDA_VISIBLE_DEVICES=0 python train_dvae_xtts.py \
 --lr=5e-6
 ```
 
+Update: If you have enough short texts in your datasets (about 20 hours), you do not need to finetune DVAE.
+
 ## 6. GPT Finetuning
 
-For GPT finetuning, execute:
+训练参数的设置详见 `train_gpt_xtts.py` 开头的各项赋值
 
-[OUTDATED]
+单卡训练：
+
 ```bash
-CUDA_VISIBLE_DEVICES=0 python train_gpt_xtts.py \
---output_path=checkpoints/ \
---train_csv_path=datasets/metadata_train.csv \
---eval_csv_path=datasets/metadata_eval.csv \
---language="vi" \
---num_epochs=5 \
---batch_size=8 \
---grad_acumm=2 \
---max_text_length=250 \
---max_audio_length=255995 \
---weight_decay=1e-2 \
---lr=5e-6 \
---save_step=2000
+TRAINER_TELEMETRY=0 CUDA_VISIBLE_DEVICES=0 python train_gpt_xtts.py
 ```
-[UPDATE - Supports training multiple datasets. Format metadatas parameter as follows: `path_to_train_csv_dataset-1,path_to_eval_csv_dataset-1,language_dataset-1 path_to_train_csv_dataset-2,path_to_eval_csv_dataset-2,language_dataset-2 ...`]
+
+多卡训练：
+
 ```bash
-CUDA_VISIBLE_DEVICES=0 python train_gpt_xtts.py \
---output_path checkpoints/ \
---metadatas datasets-1/metadata_train.csv,datasets-1/metadata_eval.csv,vi datasets-2/metadata_train.csv,datasets-2/metadata_eval.csv,vi \
---num_epochs 5 \
---batch_size 8 \
---grad_acumm 4 \
---max_text_length 400 \
---max_audio_length 330750 \
---weight_decay 1e-2 \
---lr 5e-6 \
---save_step 50000
+TRAINER_TELEMETRY=0 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m trainer.distribute --script train_gpt_xtts.py
 ```
 
-## 7. Usage Example
+其中 `CUDA_VISIBLE_DEVICES` 是需要用到的显卡号。`TRAINER_TELEMETRY` 是[在训练途中向 Coqui 反馈匿名数据](https://github.com/coqui-ai/Trainer#anonymized-telemetry)，不需要开启，否则会因为无法连接外网而训练失败
 
-Here's a sample code snippet demonstrating how to use the finetuned model:
-
-```python
-import torch
-import torchaudio
-from tqdm import tqdm
-from underthesea import sent_tokenize
-
-from TTS.tts.configs.xtts_config import XttsConfig
-from TTS.tts.models.xtts import Xtts
-
-# Device configuration
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-# Model paths
-xtts_checkpoint = "checkpoints/GPT_XTTS_FT-August-30-2024_08+19AM-6a6b942/best_model_99875.pth"
-xtts_config = "checkpoints/GPT_XTTS_FT-August-30-2024_08+19AM-6a6b942/config.json"
-xtts_vocab = "checkpoints/XTTS_v2.0_original_model_files/vocab.json"
-
-# Load model
-config = XttsConfig()
-config.load_json(xtts_config)
-XTTS_MODEL = Xtts.init_from_config(config)
-XTTS_MODEL.load_checkpoint(config, checkpoint_path=xtts_checkpoint, vocab_path=xtts_vocab, use_deepspeed=False)
-XTTS_MODEL.to(device)
-
-print("Model loaded successfully!")
-
-# Inference
-tts_text = "Good to see you."
-speaker_audio_file = "ref.wav"
-lang = "vi"
-
-gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(
-    audio_path=speaker_audio_file,
-    gpt_cond_len=XTTS_MODEL.config.gpt_cond_len,
-    max_ref_length=XTTS_MODEL.config.max_ref_len,
-    sound_norm_refs=XTTS_MODEL.config.sound_norm_refs,
-)
-
-tts_texts = sent_tokenize(tts_text)
-
-wav_chunks = []
-for text in tqdm(tts_texts):
-    wav_chunk = XTTS_MODEL.inference(
-        text=text,
-        language=lang,
-        gpt_cond_latent=gpt_cond_latent,
-        speaker_embedding=speaker_embedding,
-        temperature=0.1,
-        length_penalty=1.0,
-        repetition_penalty=10.0,
-        top_k=10,
-        top_p=0.3,
-    )
-    wav_chunks.append(torch.tensor(wav_chunk["wav"]))
-
-out_wav = torch.cat(wav_chunks, dim=0).unsqueeze(0).cpu()
-
-# Play audio (for Jupyter Notebook)
-from IPython.display import Audio
-Audio(out_wav, rate=24000)
-```
+训练过程中，best model 只会保存一个，可在途中手动复制出来一些保存
 
 Note: Finetuning the HiFiGAN decoder was attempted but resulted in worse performance. DVAE and GPT finetuning are sufficient for optimal results.
 
-Update: If you have enough short texts in your datasets (about 20 hours), you do not need to finetune DVAE.
+## 7. 合成音频
+
+运行 `run_tts.py`

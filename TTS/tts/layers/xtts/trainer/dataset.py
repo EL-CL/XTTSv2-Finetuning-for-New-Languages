@@ -129,7 +129,7 @@ class XTTSDataset(torch.utils.data.Dataset):
         if self.use_masking_gt_prompt_approach:
             # get a slice from GT to condition the model
             cond, _, cond_idxs = get_prompt_slice(
-                audiopath, self.max_conditioning_length, self.min_conditioning_length, self.sample_rate, self.is_eval, sample["ref_file"]
+                audiopath, self.max_conditioning_length, self.min_conditioning_length, self.sample_rate, self.is_eval, sample.get("ref_file", "null")
             )
             # if use masking do not use cond_len
             cond_len = torch.nan
@@ -140,7 +140,7 @@ class XTTSDataset(torch.utils.data.Dataset):
                 else audiopath
             )
             cond, cond_len, _ = get_prompt_slice(
-                ref_sample, self.max_conditioning_length, self.min_conditioning_length, self.sample_rate, self.is_eval, sample["ref_file"]
+                ref_sample, self.max_conditioning_length, self.min_conditioning_length, self.sample_rate, self.is_eval, sample.get("ref_file", "null")
             )
             # if do not use masking use cond_len
             cond_idxs = torch.nan

@@ -1,101 +1,90 @@
-import argparse
 from tokenizers import Tokenizer
 import os
-import pandas as pd
 from tokenizers.models import BPE
 from tokenizers.pre_tokenizers import Whitespace
 from tokenizers.trainers import BpeTrainer
 import json
 
-def combine_tokenizers(old_tokenizer, new_tokenizer, save_dir):
-    # Load both the json files, take the union, and store it
-    json1 = json.load(open(os.path.join(old_tokenizer, 'vocab.json')))
-    json2 = json.load(open(os.path.join(new_tokenizer, 'vocab.json')))
 
-    # Create a new vocabulary
-    new_vocab = {}
-    idx = 0
-    for word in json1.keys():
-        if word not in new_vocab.keys():
-            new_vocab[word] = idx
-            idx += 1
-
-    # Add words from second tokenizer
-    for word in json2.keys():
-        if word not in new_vocab.keys():
-            new_vocab[word] = idx
-            idx += 1
-
-    # Make the directory if necessary
-    os.makedirs(save_dir, exist_ok=True)
-
-    # Save the vocab
-    with open(os.path.join(save_dir, 'vocab.json'), 'w') as fp:
-        json.dump(new_vocab, fp, ensure_ascii=False)
-
-    # Merge the two merges file. Don't handle duplicates here
-    # Concatenate them, but ignore the first line of the second file
-    os.system('cat {} > {}'.format(os.path.join(old_tokenizer, 'merges.txt'), os.path.join(save_dir, 'merges.txt')))
-    os.system('tail -n +2 -q {} >> {}'.format(os.path.join(new_tokenizer, 'merges.txt'), os.path.join(save_dir, 'merges.txt')))
+def read_annotation(annotation_path):
+    texts = []
+    with open(annotation_path, encoding='utf-8') as f:
+        for line in f:
+            text = line.strip('\n').split('|')[1]
+            texts.append(text)
+    return texts
 
 
-def extend_tokenizer(args):
-    
-    root = os.path.join(args.output_path, "XTTS_v2.0_original_model_files/")
+def combine_tokenizers(temp_folder):
+    vocab = {}
+    v = 0
+    for i in ['old', 'new']:
+        with open(temp_folder + i + '/vocab.json', encoding='utf-8') as f:
+            data = json.load(f)
+        for token in data.keys():
+            if token in vocab:
+                continue
+            if i == 'old':
+                assert data[token] == v
+            vocab[token] = v
+            v += 1
+    with open(temp_folder + 'extended/vocab.json', 'w', encoding='utf-8') as f:
+        json.dump(vocab, f, ensure_ascii=False)
 
-    # save seperately vocab, merges
-    existing_tokenizer = Tokenizer.from_file(os.path.join(root, "vocab.json"))
-    old_tokenizer_path = os.path.join(root, "old_tokenizer/")
-    os.makedirs(old_tokenizer_path, exist_ok=True)
-    existing_tokenizer.model.save(old_tokenizer_path)
+    # Keep duplicates in merges files
+    os.system('cat {} > {}'.format(
+        temp_folder + 'old/merges.txt',
+        temp_folder + 'extended/merges.txt',
+    ))
+    os.system('tail -n +2 -q {} >> {}'.format(
+        temp_folder + 'new/merges.txt',
+        temp_folder + 'extended/merges.txt',
+    ))
 
-    # train new tokenizer
-    traindf = pd.read_csv(args.metadata_path, sep="|")
-    texts = traindf.text.to_list()
+
+def extend_tokenizer(annotation_paths, special_tokens, old_vocab_path, new_vocab_path, extended_vocab_path, temp_folder, extended_vocab_size):
+    for i in ['old', 'new', 'extended']:
+        os.makedirs(temp_folder + i, exist_ok=True)
+
+    # https://github.com/huggingface/tokenizers
+    # https://huggingface.co/docs/tokenizers/index
+    texts = [text for i in annotation_paths for text in read_annotation(i)]
+    trainer = BpeTrainer(
+        special_tokens=special_tokens,
+        vocab_size=extended_vocab_size,
+    )
+
+    old_tokenizer = Tokenizer.from_file(old_vocab_path)
+    old_tokenizer.model.save(temp_folder + 'old')
 
     new_tokenizer = Tokenizer(BPE())
     new_tokenizer.pre_tokenizer = Whitespace()
+    new_tokenizer.train_from_iterator(texts, trainer=trainer)
+    new_tokenizer.add_special_tokens(special_tokens)
+    new_tokenizer.model.save(temp_folder + 'new')
+    new_tokenizer.save(new_vocab_path)
 
-    trainer = BpeTrainer(special_tokens=[f"[{args.language}]"], vocab_size=args.extended_vocab_size)
-    new_tokenizer.train_from_iterator(iter(texts), trainer=trainer)
-    new_tokenizer.add_special_tokens([f"[{args.language}]"])
+    combine_tokenizers(temp_folder)
 
-    new_tokenizer_path = os.path.join(root, "new_tokenizer/")
-    os.makedirs(new_tokenizer_path, exist_ok=True)
-    new_tokenizer.model.save(new_tokenizer_path)
-
-    merged_tokenizer_path = os.path.join(root, "merged_tokenizer/")
-    combine_tokenizers(
-        old_tokenizer_path,
-        new_tokenizer_path,
-        merged_tokenizer_path
+    old_tokenizer.model = old_tokenizer.model.from_file(
+        temp_folder + 'extended/vocab.json',
+        temp_folder + 'extended/merges.txt',
     )
+    old_tokenizer.add_special_tokens(special_tokens)
+    old_tokenizer.save(extended_vocab_path)
 
-    tokenizer = Tokenizer.from_file(os.path.join(root, "vocab.json"))
-    tokenizer.model = tokenizer.model.from_file(os.path.join(merged_tokenizer_path, 'vocab.json'), os.path.join(merged_tokenizer_path, 'merges.txt'))
-    tokenizer.add_special_tokens([f"[{args.language}]"])
 
-    tokenizer.save(os.path.join(root, "vocab.json"))
-
-    os.system(f'rm -rf {old_tokenizer_path} {new_tokenizer_path} {merged_tokenizer_path}')
-
-def adjust_config(args):
-    config_path = os.path.join(args.output_path, "XTTS_v2.0_original_model_files/config.json")
-    with open(config_path, "r") as f:
-        config = json.load(f)
-    config["languages"] += [args.language]
-    with open(config_path, 'w') as f:
-        json.dump(config, f, indent=4)
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("--output_path", type=str, required=True, help="")
-    parser.add_argument("--metadata_path", type=str, required=True, help="")
-    parser.add_argument("--language", type=str, required=True, help="")
-    parser.add_argument("--extended_vocab_size", default=2000, type=int, required=True, help="")
-
-    args = parser.parse_args()
-
-    extend_tokenizer(args)
-    adjust_config(args)
+# 将 sample 替换为要训练的新语言的语言代码/名称
+# models/metadata.txt 是数据集的转写文件
+# original_model/vocab.json 是原始模型的词汇文件
+# 后面 3 个 models 下的是新生成的文件
+languages = ['sample']
+extend_tokenizer(
+    ['models/metadata.txt'],
+    [f'[{language}]' for language in languages],
+    'original_model/vocab.json',
+    'models/vocab_new_only.json',
+    'models/vocab.json',
+    'models/temp_tokenizers/',
+    2000,
+)
