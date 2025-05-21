@@ -15,6 +15,24 @@ xtts_checkpoint = "models/GPT_XTTS_FT-August-30-2024_08+19AM-6a6b942/best_model_
 xtts_config = "models/config.json"
 xtts_vocab = "models/vocab.json"
 
+speaker_audio_files = {
+    # 合成所参照的音色
+    "M": "male.wav",
+    "F": "female.wav",
+}
+
+text_inputs = {
+    # 文件标题: (语言名, 文本)
+    # 文本可以是多个句子连在一起，也可以是列表
+    # 多个句子连在一起时，后面会由 sent_tokenize 根据标点（必须是西文标点）切分成列表
+    "文本1": ("sample", "How do you do?"),
+    "文本2": ("sample", "Nice to meet you. Good to see you."),
+    "文本3": ("sample", [
+        "Good to see you.",
+        "Nice to meet you.",
+    ]),
+}
+
 # Load model
 config = XttsConfig()
 config.load_json(xtts_config)
@@ -25,18 +43,6 @@ XTTS_MODEL.to(device)
 print("Model loaded successfully!")
 
 # Inference
-text_lang_pairs = {
-    # 文件标题: (文本, 语言名)
-    "句子1": ("How do you do?", "sample"),
-    "句子2": ("Nice to meet you.", "sample"),
-    "句子3": ("Good to see you.", "sample"),
-}
-speaker_audio_files = {
-    # 合成所参照的音色
-    "M": "male.wav",
-    "F": "female.wav",
-}
-
 time = datetime.datetime.now().strftime("%m-%d_%H-%M")
 for speaker_name, speaker_audio_file in speaker_audio_files.items():
     gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(
@@ -45,11 +51,11 @@ for speaker_name, speaker_audio_file in speaker_audio_files.items():
         max_ref_length=XTTS_MODEL.config.max_ref_len,
         sound_norm_refs=XTTS_MODEL.config.sound_norm_refs,
     )
-    for filename, (text, lang) in text_lang_pairs.items():
+    for filename, (lang, text) in text_inputs.items():
         filename = f"outputs/{time} {filename} {speaker_name}.wav"
         print(filename)
 
-        texts = sent_tokenize(text)
+        texts = sent_tokenize(text) if isinstance(text, str) else text
 
         wav_chunks = []
         for text in tqdm(texts):
