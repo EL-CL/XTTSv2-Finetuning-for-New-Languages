@@ -6,13 +6,17 @@ This guide provides instructions for finetuning XTTSv2 on a new language, using 
 
 
 ## Table of Contents
-1. [Installation](#1-installation)
-2. [Data Preparation](#2-data-preparation)
-3. [Pretrained Model Download](#3-pretrained-model-download)
-4. [Vocabulary Extension and Configuration Adjustment](#4-vocabulary-extension-and-configuration-adjustment)
-5. [DVAE Finetuning (Optional)](#5-dvae-finetuning-optional)
-6. [GPT Finetuning](#6-gpt-finetuning)
-7. [合成音频](#7-合成音频)
+- [XTTSv2 Finetuning Guide for New Languages](#xttsv2-finetuning-guide-for-new-languages)
+  - [Table of Contents](#table-of-contents)
+  - [1. Installation](#1-installation)
+  - [2. Data Preparation](#2-data-preparation)
+  - [3. Pretrained Model Download](#3-pretrained-model-download)
+  - [4. Vocabulary Extension and Configuration Adjustment](#4-vocabulary-extension-and-configuration-adjustment)
+  - [5. DVAE Finetuning (Optional)](#5-dvae-finetuning-optional)
+  - [6. GPT Finetuning](#6-gpt-finetuning)
+  - [7. 合成音频](#7-合成音频)
+    - [通过脚本](#通过脚本)
+    - [通过 Web UI](#通过-web-ui)
 
 ## 1. Installation
 
@@ -115,4 +119,10 @@ Note: Finetuning the HiFiGAN decoder was attempted but resulted in worse perform
 
 ## 7. 合成音频
 
-运行 `run_tts.py`
+### 通过脚本
+
+运行 `run_tts.py`，相关输入和参数见文件
+
+### 通过 Web UI
+
+安装 `pip install streamlit`，然后执行 `streamlit run run_tts_webui.py`

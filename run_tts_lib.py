@@ -15,7 +15,7 @@ def split_sentences(texts: str | list[str]):
 
 
 def load_model(xtts_checkpoint, xtts_config, xtts_vocab, device):
-    print("Loading model...")
+    print("[XTTS] Loading model...")
     config = XttsConfig()
     config.load_json(xtts_config)
     model = Xtts.init_from_config(config)
@@ -24,7 +24,7 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab, device):
                           vocab_path=xtts_vocab,
                           use_deepspeed=False)
     model.to(device)
-    print("Model loaded successfully!")
+    print("[XTTS] Model loaded successfully!")
     return model
 
 
@@ -43,7 +43,7 @@ def inference(
     xtts_model, gpt_cond_latent, speaker_embedding,
     **hf_generate_kwargs,
 ):
-    print(filename, "is generating...")
+    print("[XTTS]", filename, "is generating...")
     wav_chunks = []
     for sentence in sentences:
         wav_chunk = xtts_model.inference(
@@ -57,4 +57,4 @@ def inference(
     out_wav = torch.cat(wav_chunks, dim=0).unsqueeze(0).cpu()
     torchaudio.save(filename, out_wav, 24000,
                     encoding="PCM_S", bits_per_sample=16)
-    print(filename, "saved successfully!")
+    print("[XTTS]", filename, "saved successfully!")
