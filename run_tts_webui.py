@@ -38,7 +38,11 @@ model = initialize()
 
 st.title("语音合成")
 lang_name = st.radio("要合成的语言：", langs, 0, horizontal=True)
-texts = st.text_area("要合成的文本：", "Nice to meet you.\nGood to see you.")
+texts = st.text_area(
+    "要合成的文本：",
+    "Nice to meet you.\nGood to see you.",
+    height=200,
+)
 
 with st.sidebar:
     speaker = st.selectbox("合成参照的音色", speakers, speaker_default_index)
@@ -50,19 +54,19 @@ with st.sidebar:
     top_p = st.slider("Top P", 0.0, 1.0, 0.3, 0.01)
 
 if st.button("合成", disabled=not texts):
-    texts = re.sub(r"\.? ?\n", ". ", texts)
+    texts = re.sub(r"\.? *\n", ". ", texts)
     texts = split_sentences(texts)
     print(f"[XTTS] 合成文本：{texts}")
 
     time = datetime.datetime.now().strftime("%m-%d_%H-%M")
     short_id = str(uuid.uuid4())[:6]
     lang = langs[lang_name]
-    filename = f"outputs/{time}_{short_id}_{lang}_{speaker.split('.')[0]}.wav"
+    st.session_state.filename = f"outputs/{time}_{short_id}_{lang}_{speaker.split('.')[0]}.wav"
     with st.spinner("正在合成，请稍候……"):
         gpt_cond_latent, speaker_embedding = \
             initialize_speaker(model, f"targets/{speaker}")
         inference(
-            texts, lang, filename,
+            texts, lang, st.session_state.filename,
             model, gpt_cond_latent, speaker_embedding,
             temperature=temperature,
             length_penalty=length_penalty,
@@ -71,4 +75,5 @@ if st.button("合成", disabled=not texts):
             top_p=top_p,
             speed=speed,
         )
-    st.audio(filename, format="audio/wav")
+if "filename" in st.session_state:
+    st.audio(st.session_state.filename, format="audio/wav")
