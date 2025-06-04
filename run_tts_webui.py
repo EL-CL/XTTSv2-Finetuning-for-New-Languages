@@ -9,7 +9,6 @@ from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ct
 from run_tts_lib import *
 
 
-@st.cache_resource
 def initialize():
     os.makedirs("outputs", exist_ok=True)
     st.session_state.filename = ""
@@ -19,7 +18,6 @@ def initialize():
     st.session_state.speaker_embedding = None
 
 
-@st.cache_resource(show_spinner="正在加载模型，请稍候……")
 def do_load_model():
     # Device configuration
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -46,8 +44,11 @@ langs = {
     "汉语": "zh-cn",
 }
 
-initialize()
-do_load_model()
+if "is_generating" not in st.session_state:
+    initialize()
+if "model" not in st.session_state:
+    with st.spinner("正在加载模型，请稍候……"):
+        do_load_model()
 
 st.title("语音合成")
 lang_name = st.radio("要合成的语言：", langs, 0, horizontal=True)
