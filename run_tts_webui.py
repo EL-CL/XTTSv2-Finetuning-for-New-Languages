@@ -2,7 +2,6 @@ import os
 import re
 import time
 import datetime
-import uuid
 import streamlit as st
 from threading import Thread
 from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
@@ -16,24 +15,24 @@ def initialize():
     st.session_state.last_speaker = ""
     st.session_state.gpt_cond_latent = None
     st.session_state.speaker_embedding = None
+    st.session_state.session_id = get_script_run_ctx().session_id
+    print(f"[XTTS] Session initialized, ID: {st.session_state.session_id}")
 
 
-def do_load_model():
-    # Device configuration
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-    # Model paths
+@st.cache_resource(show_spinner="正在加载模型，请稍候……")
+def get_model():
     xtts_checkpoint = "models/GPT_XTTS_FT-August-30-2024_08+19AM-6a6b942/best_model_99875.pth"
     xtts_config = "models/config.json"
     xtts_vocab = "models/vocab.json"
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    return load_model(xtts_checkpoint, xtts_config, xtts_vocab, device)
 
-    st.session_state.model = \
-        load_model(xtts_checkpoint, xtts_config, xtts_vocab, device)
 
+model = get_model()
 
 # 合成所参照的音色
 speakers = os.listdir("targets")
-speaker_default = "Rogger.wav"
+speaker_default = "male.wav"
 speaker_default_index = 0
 if speaker_default in speakers:
     speaker_default_index = speakers.index(speaker_default)
@@ -46,16 +45,13 @@ langs = {
 
 if "is_generating" not in st.session_state:
     initialize()
-if "model" not in st.session_state:
-    with st.spinner("正在加载模型，请稍候……"):
-        do_load_model()
 
 st.title("语音合成")
 lang_name = st.radio("要合成的语言：", langs, 0, horizontal=True)
 input_texts = st.text_area(
     "要合成的文本：",
     "Nice to meet you.\nGood to see you.",
-    height=200,
+    height=300,
 )
 
 with st.sidebar:
@@ -75,19 +71,20 @@ def generate():
     print(f"[XTTS] 合成文本（处理前）：{input_texts}")
     print(f"[XTTS] 合成文本（处理后）：{texts}")
 
-    time = datetime.datetime.now().strftime("%m-%d_%H-%M")
-    short_id = str(uuid.uuid4())[:6]
+    time_now = datetime.datetime.now()
+    path = f"outputs/{time_now.strftime('%Y-%m')}"
+    os.makedirs(path, exist_ok=True)
     lang = langs[lang_name]
-    filename = f"outputs/{time}_{short_id}_{lang}_{speaker.split('.')[0]}.wav"
+    filename = f"{path}/{time_now.strftime('%y%m%d_%H%M%S')}_{st.session_state.session_id[:8]}_{lang}_{speaker.split('.')[0]}.wav"
 
     if speaker != st.session_state.last_speaker:
-        # 仅在发音人改变时初始化发音人，节省时间
+        # 仅在发音人改变时初始化发音人，节省时间（在服务器上其实很快）
         st.session_state.last_speaker = speaker
         st.session_state.gpt_cond_latent, st.session_state.speaker_embedding = \
-            initialize_speaker(st.session_state.model, f"targets/{speaker}")
+            initialize_speaker(model, f"targets/{speaker}")
     inference(
         texts, lang, filename,
-        st.session_state.model, st.session_state.gpt_cond_latent, st.session_state.speaker_embedding,
+        model, st.session_state.gpt_cond_latent, st.session_state.speaker_embedding,
         temperature=temperature,
         length_penalty=length_penalty,
         repetition_penalty=repetition_penalty,

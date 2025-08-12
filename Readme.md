@@ -125,6 +125,4 @@ Note: Finetuning the HiFiGAN decoder was attempted but resulted in worse perform
 
 ### 通过 Web UI
 
-安装 `pip install streamlit`，然后执行 `streamlit run run_tts_webui.py`
-
-（安装 streamlit 可能导致 numpy 被更新到 2.x 版本，进而导致运行时报错。此时重新执行 `pip install numpy==1.22.0` 即可）
+安装 Streamlit（`pip install streamlit==1.40.1 numpy==1.22.0`），然后执行 `streamlit run run_tts_webui.py`

@@ -15,7 +15,7 @@ def split_sentences(texts: str | list[str]):
 
 
 def load_model(xtts_checkpoint, xtts_config, xtts_vocab, device):
-    print("[XTTS] Loading model...")
+    print(f"[XTTS] Loading model on {device}")
     config = XttsConfig()
     config.load_json(xtts_config)
     model = Xtts.init_from_config(config)
